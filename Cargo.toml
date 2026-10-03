@@ -1,0 +1,20 @@
+[package]
+name = "image_converter"
+description = "An image conversion API written in Rust! Supports png, jpeg, webp, gif, bmp, tiff, ico, avif, heic & resizing"
+authors = ["M336"]
+version = "1.0.0"
+edition = "2024"
+repository = "https://github.com/M336G/image_converter"
+license = "MPL-2.0"
+
+[dependencies]
+actix-cors = "0.7.2"
+actix-multipart = "0.8.5"
+actix-rt = "2.15.0"
+actix-web = "4.15.0"
+dotenv = "0.15.0"
+futures-util = "0.3.34"
+infer = "0.22.0"
+magick_rust = "2.1.1"
+randomizer = "0.1.2"
+tokio = "1.53.1"
