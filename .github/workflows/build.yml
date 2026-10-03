@@ -43,22 +43,19 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build binary
-        run: cargo build --release
+        run: cargo build --release --target x86_64-unknown-linux-gnu
 
       - name: Package
         run: |
-          mkdir -p dist/lib
           cp target/release/image_converter dist/
           strip dist/image_converter
-          cp -a build/install/lib/libMagick*.so* dist/lib/
           if ldd dist/image_converter | grep "not found"; then exit 1; fi
-          zip -r image_converter-linux.zip dist/*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: image_converter-linux
-          path: image_converter-linux.zip
+          path: dist
 
   macos:
     name: macos
@@ -72,20 +69,22 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Build binary
-        run: cargo build --release
+        run: cargo build --release --target x86_64-apple-darwin
 
       - name: Package
         run: |
           strip target/release/image_converter
-          cp target/release/image_converter image_converter-macos-arm64
+          cp target/release/image_converter image_converter-macos
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: image_converter-macos-arm64
-          path: image_converter-macos-arm64
+          name: image_converter-macos
+          path: image_converter-macos
