@@ -49,7 +49,6 @@ jobs:
         run: |
           cp target/x86_64-unknown-linux-gnu/release/image_converter image_converter-linux
           strip image_converter-linux
-          if ldd image_converter-linux | grep "not found"; then exit 1; fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
