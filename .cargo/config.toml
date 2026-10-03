@@ -1,0 +1,8 @@
+[env]
+PKG_CONFIG_PATH = { value = "build/install/lib/pkgconfig", relative = true }
+
+[target.'cfg(target_os = "linux")']
+rustflags = [
+    "-C", "link-arg=-Wl,-rpath,$ORIGIN/lib",
+    "-C", "link-arg=-Wl,-rpath,$ORIGIN/../../build/install/lib",
+]

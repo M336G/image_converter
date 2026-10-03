@@ -2,34 +2,90 @@ name: "Build Binaries"
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
 jobs:
-  release:
-    name: ${{ matrix.platform.os-name }}
-    strategy:
-      matrix:
-        platform:
-          - os-name: windows
-            runs-on: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os-name: linux
-            runs-on: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os-name: macos
-            runs-on: macos-latest
-            target: x86_64-apple-darwin
-    runs-on: ${{ matrix.platform.runs-on }}
+  linux:
+    name: linux
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang libclang-dev pkg-config \
+            libjpeg-dev libpng-dev libwebp-dev libtiff-dev libheif-dev zlib1g-dev
+
+      - name: Get ImageMagick
+        id: im
+        run: echo "sha=$(git rev-parse HEAD:libs/ImageMagick)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache ImageMagick
+        id: im-cache
+        uses: actions/cache@v4
+        with:
+          path: build/install
+          key: imagemagick-${{ runner.os }}-${{ steps.im.outputs.sha }}-${{ hashFiles('scripts/build-imagemagick.sh') }}
+
+      - name: Build ImageMagick
+        if: steps.im-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-imagemagick.sh
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v1
-        with:
-          command: build
-          target: ${{ matrix.platform.target }}
-          args: "--release"
-          strip: true
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist/lib
+          cp target/release/image_converter dist/
+          strip dist/image_converter
+          cp -a build/install/lib/libMagick*.so* dist/lib/
+          if ldd dist/image_converter | grep "not found"; then exit 1; fi
+          zip -r image_converter-linux.zip dist/*
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: image_converter-${{ matrix.platform.os-name }}
-          path: target/${{ matrix.platform.target }}/release/image_converter${{ matrix.platform.os-name == 'windows' && '.exe' || '' }}
+          name: image_converter-linux
+          path: image_converter-linux.zip
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install ImageMagick
+        run: brew install imagemagick pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build binary
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          strip target/release/image_converter
+          cp target/release/image_converter image_converter-macos-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: image_converter-macos-arm64
+          path: image_converter-macos-arm64
