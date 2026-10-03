@@ -47,15 +47,15 @@ jobs:
 
       - name: Package
         run: |
-          cp target/release/image_converter dist/
-          strip dist/image_converter
-          if ldd dist/image_converter | grep "not found"; then exit 1; fi
+          cp target/x86_64-unknown-linux-gnu/image_converter image_converter-linux
+          strip image_converter-linux
+          if ldd image_converter-linux | grep "not found"; then exit 1; fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: image_converter-linux
-          path: dist
+          path: image_converter-linux
 
   macos:
     name: macos
@@ -80,8 +80,8 @@ jobs:
 
       - name: Package
         run: |
-          strip target/release/image_converter
-          cp target/release/image_converter image_converter-macos
+          cp target/release/x86_64-apple-darwin image_converter-macos
+          strip image_converter-macos
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
