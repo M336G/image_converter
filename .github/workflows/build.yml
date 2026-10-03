@@ -47,7 +47,7 @@ jobs:
 
       - name: Package
         run: |
-          cp target/x86_64-unknown-linux-gnu/image_converter image_converter-linux
+          cp target/x86_64-unknown-linux-gnu/release/image_converter image_converter-linux
           strip image_converter-linux
           if ldd image_converter-linux | grep "not found"; then exit 1; fi
 
@@ -69,18 +69,16 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Build binary
-        run: cargo build --release --target x86_64-apple-darwin
+        run: cargo build --release
 
       - name: Package
         run: |
-          cp target/release/x86_64-apple-darwin image_converter-macos
+          cp target/release/image_converter image_converter-macos
           strip image_converter-macos
 
       - name: Upload artifact
