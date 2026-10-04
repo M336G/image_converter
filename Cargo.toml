@@ -2,7 +2,7 @@
 name = "image_converter"
 description = "An image conversion API written in Rust! Supports png, jpeg, webp, gif, bmp, tiff, ico, avif, heic, hdr, psd, cr2, pdf, qoi & resizing"
 authors = ["M336"]
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 repository = "https://github.com/M336G/image_converter"
 license = "MPL-2.0"

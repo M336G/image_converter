@@ -1,6 +1,6 @@
 use actix_multipart::Multipart;
 use actix_rt::time::timeout;
-use actix_web::http::StatusCode;
+use actix_web::http::{StatusCode, header};
 use actix_web::{HttpResponse, Responder, post, web};
 use futures_util::{StreamExt, TryStreamExt};
 use magick_rust::{AlphaChannelOption, FilterType, MagickWand, PixelWand};
@@ -422,5 +422,8 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
 
     println!("Successfully converted {} from {} to {}!", conversion_id, input_format, target_format);
 
-    HttpResponse::Ok().content_type(format_to_mime(&target_format)).body(output)
+    HttpResponse::Ok()
+        .content_type(format_to_mime(&target_format))
+        .insert_header((header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}.{}\"", conversion_id, target_format)))
+        .body(output)
 }
