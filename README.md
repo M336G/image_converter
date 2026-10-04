@@ -1,5 +1,5 @@
 # image_converter
-An image conversion API written in [Rust](https://www.rust-lang.org/)! Supports `png`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `ico`, `avif`, `heic` & resizing
+An image conversion API written in [Rust](https://www.rust-lang.org/)! Supports `png`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `ico`, `avif`, `heic`, `hdr`, `psd`, `cr2`, `pdf`, `qoi` & resizing
 
 ## Running
 1. Download a binary from the **[releases tab](https://github.com/M336G/image_converter/releases/)** or clone the repository (if you have **[Rust](https://www.rust-lang.org/)** installed). Make sure you've also got **[ImageMagick](https://imagemagick.org/)** installed.

@@ -12,8 +12,9 @@ use std::time::Duration;
 
 use crate::{ConversionLimiter, MaxDimensions, MaxFileSize, UploadLimiter};
 
-const SUPPORTED_FORMATS: [&str; 9] = [
+const SUPPORTED_FORMATS: [&str; 14] = [
     "png", "jpeg", "webp", "gif", "bmp", "tiff", "ico", "avif", "heic",
+    "hdr", "psd", "cr2", "pdf", "qoi"
 ];
 
 fn format_to_mime(format: &str) -> &'static str {
@@ -27,6 +28,11 @@ fn format_to_mime(format: &str) -> &'static str {
         "ico" => "image/x-icon",
         "avif" => "image/avif",
         "heic" => "image/heic",
+        "hdr" => "image/vnd.radiance",
+        "psd" => "image/vnd.adobe.photoshop",
+        "cr2" => "image/x-canon-cr2",
+        "pdf" => "application/pdf",
+        "qoi" => "image/qoi",
         _ => "application/octet-stream",
     }
 }
@@ -241,13 +247,10 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
         .map(|format| normalize_format(&format))
         .filter(|format| !format.is_empty());
     if let Some(format) = &format {
-        if !SUPPORTED_FORMATS.contains(&format.as_str()) {
+        if !SUPPORTED_FORMATS.contains(&format.as_str()) || ["cr2"].contains(&format.as_str()) {
             return build_response(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                format!(
-                    "Unsupported output format! Only {} can be supplied!",
-                    SUPPORTED_FORMATS.join(", ")
-                ),
+                format!("Unsupported output format: {format}")
             );
         }
     }
@@ -265,13 +268,12 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
     let input_format = match infer::get(&infer_buffer) {
         Some(file_type) => {
             let extension = normalize_format(file_type.extension());
-            if !SUPPORTED_FORMATS.contains(&extension.as_str()) {
+            if !SUPPORTED_FORMATS.contains(&extension.as_str()) || ["hdr", "pdf", "qoi"].contains(&extension.as_str()) {
                 return build_response(
                     StatusCode::UNSUPPORTED_MEDIA_TYPE,
                     format!(
-                        "Unsupported input file type: {} ({})",
-                        extension,
-                        file_type.mime_type()
+                        "Unsupported input file type: {}",
+                        extension
                     ),
                 );
             }
@@ -364,7 +366,7 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
         let resize = dimensions.filter(|size| *size != (source_width, source_height));
 
         move || {
-            let wand = MagickWand::new();
+            let mut wand = MagickWand::new();
             wand.read_image(&spec)
                 .map_err(|error| format!("read failed: {:?}", error))?;
 
@@ -389,6 +391,9 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
                 wand.set_image_alpha_channel(AlphaChannelOption::Off)
                     .map_err(|error| format!("{:?}", error))?;
             }
+
+            wand.set_image_format(&target_format)
+                .map_err(|error| format!("unsupported format: {:?}", error))?;
 
             wand.write_image_blob(&target_format)
                 .map_err(|error| format!("write failed: {:?}", error))
