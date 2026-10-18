@@ -1,8 +1,8 @@
 # image_converter
-An image conversion API written in [Rust](https://www.rust-lang.org/)! Supports `png`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `ico`, `avif`, `heic`, `hdr`, `psd`, `cr2`, `pdf`, `qoi` & resizing
+An image conversion API written in [Rust](https://www.rust-lang.org/)! Supports `png`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `ico`, `avif`, `heic`, `hdr`, `psd`, `pdf`, `qoi`, `jxl` & resizing
 
 ## Running
-1. Download a binary from the **[releases tab](https://github.com/M336G/image_converter/releases/)** or clone the repository (if you have **[Rust](https://www.rust-lang.org/)** installed). Make sure you've also got **[ImageMagick](https://imagemagick.org/)** installed.
+1. Download a binary from the **[releases tab](https://github.com/M336G/image_converter/releases/)** or clone the repository (if you have **[Rust](https://www.rust-lang.org/)** installed). Make sure you've also got **[ImageMagick](https://imagemagick.org/)** installed (with `libjpeg-dev`, `libpng-dev`, `libwebp-dev`, `libtiff-dev`, `libheif-dev` and `libjxl-dev`).
 2. Take a look at **[.env.example](https://github.com/M336G/image_converter/blob/main/.env.example)** and create a `.env` file if you need to configure your server.
 3. Execute the binary you downloaded or use `cargo run --release` if you cloned the repository.
 
@@ -11,7 +11,9 @@ An image conversion API written in [Rust](https://www.rust-lang.org/)! Supports 
 ## Usage
 Once you've got your instance running, you may use the `POST /` endpoint by supplying a `file` and a `format` or `dimensions` to it via multipart form data.
 
-That's it, it's this simple!
+All formats support both input and output, except `psd` and `pdf`, which are supported for output only.
+
+**That's it, it's this simple!**
 
 ## Contributing
 Pull requests are more than welcome to the project! Feel free to open one if you feel like something needs modification or if there is any problem with the codebase.

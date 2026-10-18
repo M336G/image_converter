@@ -2,6 +2,7 @@ use actix_multipart::Multipart;
 use actix_rt::time::timeout;
 use actix_web::http::{StatusCode, header};
 use actix_web::{HttpResponse, Responder, post, web};
+use file_format::FileFormat;
 use futures_util::{StreamExt, TryStreamExt};
 use magick_rust::{AlphaChannelOption, FilterType, MagickWand, PixelWand};
 use randomizer::Randomizer;
@@ -12,9 +13,13 @@ use std::time::Duration;
 
 use crate::{ConversionLimiter, MaxDimensions, MaxFileSize, UploadLimiter};
 
-const SUPPORTED_FORMATS: [&str; 14] = [
+const INPUT_FORMATS: &[&str] = &[
     "png", "jpeg", "webp", "gif", "bmp", "tiff", "ico", "avif", "heic",
-    "hdr", "psd", "cr2", "pdf", "qoi"
+    "hdr", "qoi", "jxl"
+];
+const OUTPUT_FORMATS: &[&str] = &[
+    "png", "jpeg", "webp", "gif", "bmp", "tiff", "ico", "avif", "heic",
+    "hdr", "qoi", "jxl", "psd", "pdf"
 ];
 
 fn format_to_mime(format: &str) -> &'static str {
@@ -30,9 +35,9 @@ fn format_to_mime(format: &str) -> &'static str {
         "heic" => "image/heic",
         "hdr" => "image/vnd.radiance",
         "psd" => "image/vnd.adobe.photoshop",
-        "cr2" => "image/x-canon-cr2",
         "pdf" => "application/pdf",
         "qoi" => "image/qoi",
+        "jxl" => "image/jxl",
         _ => "application/octet-stream",
     }
 }
@@ -115,14 +120,21 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
     let mut format: Option<String> = None;
     let mut dimensions: Option<String> = None;
     let mut received_file = false;
-    let mut infer_buffer: Vec<u8> = Vec::with_capacity(8192);
+    let mut format_buffer: Vec<u8> = Vec::with_capacity(8192);
     let mut total_size: usize = 0;
 
     // Go through every field in the multipart form
     let read_result = timeout(Duration::from_secs(90), async {
-        while let Ok(Some(mut field)) = payload.try_next().await {
-            let field_name = field.name().unwrap_or_default().to_string();
+        loop {
+            let mut field = match payload.try_next().await {
+                Ok(Some(field)) => field,
+                Ok(None) => break,
+                Err(_) => {
+                    return Some(build_response(StatusCode::BAD_REQUEST, "Invalid form data"));
+                }
+            };
 
+            let field_name = field.name().unwrap_or_default().to_string();
             match field_name.as_str() {
                 // Get the (optional) destination format and dimensions
                 "format" | "dimensions" => {
@@ -181,9 +193,9 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
                         }
 
                         // Store the first 8kb of the file in memory for infer to detect the file type
-                        if infer_buffer.len() < 8192 {
-                            let take = (8192 - infer_buffer.len()).min(chunk.len());
-                            infer_buffer.extend_from_slice(&chunk[..take]);
+                        if format_buffer.len() < 8192 {
+                            let take = (8192 - format_buffer.len()).min(chunk.len());
+                            format_buffer.extend_from_slice(&chunk[..take]);
                         }
 
                         if let Err(error) = file.write_all(&chunk) {
@@ -247,7 +259,7 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
         .map(|format| normalize_format(&format))
         .filter(|format| !format.is_empty());
     if let Some(format) = &format {
-        if !SUPPORTED_FORMATS.contains(&format.as_str()) || ["cr2"].contains(&format.as_str()) {
+        if !OUTPUT_FORMATS.contains(&format.as_str()) {
             return build_response(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 format!("Unsupported output format: {format}")
@@ -265,29 +277,18 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
 
     // Additional check on the input just to make sure ImageMagick doesn't get
     // any weird file
-    let input_format = match infer::get(&infer_buffer) {
-        Some(file_type) => {
-            let extension = normalize_format(file_type.extension());
-            if !SUPPORTED_FORMATS.contains(&extension.as_str()) || ["hdr", "pdf", "qoi"].contains(&extension.as_str()) {
-                return build_response(
-                    StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                    format!(
-                        "Unsupported input file type: {}",
-                        extension
-                    ),
-                );
-            }
-            extension
-        },
-
-        // Apparently it rejects rejects TIFF with a first pixel looking like
-        // a CR2 header. This happened while testing; not sure if anyone would
-        // ever have this issue but just in case
-        None if infer_buffer.starts_with(b"II*\0") || infer_buffer.starts_with(b"MM\0*") => {
-            "tiff".to_string()
-        },
-
-        None => return build_response(StatusCode::BAD_REQUEST, "Could not detect input file type"),
+    let detected_format = FileFormat::from_bytes(&format_buffer);
+    let input_format = if detected_format != FileFormat::ArbitraryBinaryData {
+        let extension = normalize_format(detected_format.extension());
+        if !INPUT_FORMATS.contains(&extension.as_str()) {
+            return build_response(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                format!("Unsupported input file type: {}", detected_format.name()),
+            );
+        }
+        extension
+    } else {
+        return build_response(StatusCode::BAD_REQUEST, "Could not detect input file type");
     };
 
     let spec = format!("{}:{}[0]", input_format, input_path.display());
@@ -356,7 +357,7 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
     println!("- To: {} ({}x{})", target_format, out_width, out_height);
 
     // If the amount of conversions reached MAX_CONCURRENT_CONVERSIONS then this will lock the request until one of them is done
-    let conversion_permit = conversion_limiter.0.acquire().await.unwrap();
+    let conversion_permit = conversion_limiter.0.clone().acquire_owned().await.unwrap();
 
     // le long-awaited conversion
     let conversion = web::block({
@@ -366,6 +367,8 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
         let resize = dimensions.filter(|size| *size != (source_width, source_height));
 
         move || {
+            let _permit = conversion_permit;
+
             let mut wand = MagickWand::new();
             wand.read_image(&spec)
                 .map_err(|error| format!("read failed: {:?}", error))?;
@@ -378,8 +381,8 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
                 let _ = wand.resize_image(width, height, FilterType::Lanczos);
             }
 
-            // For JPEG & BMP make sure the background is white
-            if matches!(target_format.as_str(), "jpeg" | "bmp") {
+            // For JPEG, BMP & PDF make sure the background is white
+            if matches!(target_format.as_str(), "jpeg" | "bmp" | "pdf") {
                 let mut white = PixelWand::new();
                 white
                     .set_color("white")
@@ -401,8 +404,6 @@ pub async fn convert(mut payload: Multipart, conversion_path: web::Data<PathBuf>
     });
 
     let result = timeout(Duration::from_secs(120), conversion).await;
-
-    drop(conversion_permit);
 
     let output = match result {
         Ok(Ok(Ok(bytes))) => bytes,

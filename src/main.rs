@@ -2,6 +2,7 @@ use actix_cors::Cors;
 use actix_web::{get, middleware, options, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use tokio::sync::Semaphore;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{env, fs};
 use std::io;
@@ -9,7 +10,7 @@ use std::io;
 mod convert;
 
 pub struct UploadLimiter(Semaphore);
-pub struct ConversionLimiter(Semaphore);
+pub struct ConversionLimiter(pub Arc<Semaphore>);
 pub struct MaxFileSize(pub usize);
 pub struct MaxDimensions(pub usize);
 
@@ -114,7 +115,7 @@ async fn main() -> io::Result<()> {
     let max_file_size_for_server = web::Data::new(MaxFileSize(max_file_size));
     let max_file_dimensions_for_server = web::Data::new(MaxDimensions(max_file_dimensions));
     let upload_limiter_for_server = web::Data::new(UploadLimiter(Semaphore::new(max_concurrent_uploads)));
-    let conversion_limiter_for_server = web::Data::new(ConversionLimiter(Semaphore::new(max_concurrent_conversions)));
+    let conversion_limiter_for_server = web::Data::new(ConversionLimiter(Arc::new(Semaphore::new(max_concurrent_conversions))));
 
     HttpServer::new(move || {
         let cors = match &allowed_origins {
